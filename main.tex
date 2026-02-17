@@ -1,0 +1,604 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{bm}
+\usepackage{mathtools}
+\newtheorem{definition}{Definition}
+\lstset{basicstyle=\ttfamily\footnotesize, breaklines=true, frame=single, xleftmargin=1em, xrightmargin=1em}
+
+\begin{document}
+
+\title{Everything You Need to Know About Tokens:\\A Comprehensive Survey from Fundamentals to\\Frontier AI Systems (2017--2026)}
+\author{\IEEEauthorblockN{A Comprehensive Educational Reference}\IEEEauthorblockA{\textit{Survey Paper --- PhD-Level Technical Guide}\\February 17, 2026}}
+\maketitle
+
+\begin{abstract}
+Tokens are the atomic units of computation in modern artificial intelligence. Every large language model (LLM), vision transformer, multimodal system, and AI agent operates by processing sequences of tokens. This paper provides a unified, comprehensive treatment: (1) what tokens are and why they exist; (2) every major tokenization algorithm (BPE, WordPiece, Unigram, SentencePiece) with pseudocode; (3) the full mathematical pipeline from raw text to model output; (4) how tokens flow through transformer architectures; (5) context windows, token economics, and API pricing; (6) tokens beyond text---vision, audio, video, and action tokens; (7) frontier developments including tokenization-free models, MoE routing, speculative decoding, and million-token contexts; and (8) open problems as of February 2026.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Tokens, Tokenization, LLMs, BPE, WordPiece, SentencePiece, Transformers, Multimodal AI, AI Agents, Context Windows, Embeddings
+\end{IEEEkeywords}
+
+%=== SECTION I ===
+\section{Introduction}
+\IEEEPARstart{T}{okens} are the fundamental units of meaning that AI models read, process, and generate. Just as atoms are to chemistry and pixels are to images, tokens are to language models---the indivisible building blocks upon which all computation rests.
+
+\subsection{Why Tokens Matter}
+Every interaction with a modern AI system involves tokens:
+\begin{itemize}[leftmargin=*]
+\item \textbf{Input:} Raw text is \emph{tokenized} into integer IDs before the model processes it.
+\item \textbf{Computation:} Transformers operate entirely on token sequences.
+\item \textbf{Output:} Models produce tokens autoregressively, then \emph{detokenize} to text.
+\item \textbf{Cost:} API pricing, context limits, and speed are measured in tokens.
+\end{itemize}
+A practical rule of thumb for English: \textbf{1 token $\approx$ 0.75 words} (100 tokens $\approx$ 75 words).
+
+\subsection{Historical Timeline}
+\begin{table}[!t]
+\centering
+\caption{Key Milestones in Tokenization and Token-Centric AI}
+\label{tab:history}
+\footnotesize
+\renewcommand{\arraystretch}{1.1}
+\begin{tabularx}{\columnwidth}{@{}c X@{}}
+\toprule
+\textbf{Year} & \textbf{Milestone} \\
+\midrule
+1994 & Byte Pair Encoding for data compression \cite{gage1994bpe} \\
+2013 & Word2Vec: dense token embeddings \cite{mikolov2013word2vec} \\
+2016 & BPE for neural MT \cite{sennrich2016bpe}; WordPiece in GNMT \cite{wu2016wordpiece} \\
+2017 & Transformer architecture \cite{vaswani2017attention} \\
+2018 & SentencePiece \cite{kudo2018sentencepiece}; BERT (WordPiece) \cite{devlin2019bert}; GPT-1 (BPE) \cite{radford2018gpt} \\
+2019 & GPT-2: byte-level BPE, 50K vocab \cite{radford2019gpt2} \\
+2020 & GPT-3 \cite{brown2020gpt3}; ViT: image patches as tokens \cite{dosovitskiy2020vit} \\
+2022 & ChatGPT brings tokens to mainstream awareness \\
+2023 & GPT-4 multimodal \cite{openai2023gpt4}; Llama 2 \cite{touvron2023llama2}; Gemini 1.0 \cite{google2023gemini} \\
+2024 & 1M+ context (Gemini 1.5 Pro) \cite{google2024gemini15}; Llama 3 128K vocab \cite{meta2024llama3} \\
+2025 & GPT-4.5, Claude 3.5 Opus, Gemini 2.0: 1--2M token contexts \\
+2026 & Multi-agent token orchestration; byte-level models mature \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%=== SECTION II ===
+\section{Tokenization Fundamentals}
+\label{sec:fundamentals}
+
+\subsection{Formal Definition}
+\begin{definition}[Tokenization]
+Given an input string $s$ and tokenizer $\mathcal{T}$ with vocabulary $\mathcal{V}$:
+\begin{equation}
+\mathcal{T}: s \rightarrow (t_1, t_2, \ldots, t_n), \quad t_i \in \mathcal{V}
+\end{equation}
+where each $t_i$ is a token. Each maps to a unique integer: $\mathrm{encode}: t_i \mapsto \mathrm{id}_i \in \{0,\ldots,|\mathcal{V}|-1\}$.
+\end{definition}
+
+Detokenization reconstructs the string: $\mathcal{T}^{-1}: (\mathrm{id}_1,\ldots,\mathrm{id}_n) \rightarrow s$.
+
+\subsection{Granularity Levels}
+\begin{table}[!t]
+\centering
+\caption{Tokenization Granularity Comparison}
+\label{tab:granularity}
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\columnwidth}{@{}l c c X@{}}
+\toprule
+\textbf{Level} & $|\mathcal{V}|$ & \textbf{Seq Len} & \textbf{Trade-offs} \\
+\midrule
+Character & ${\sim}$300 & Very long & No OOV; slow \\
+Subword & 32K--128K & Moderate & \textbf{Best balance} \\
+Word & 100K+ & Short & OOV problem \\
+Byte & 256 & Very long & Universal \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Subword tokenization} is the dominant paradigm. Common words remain whole; rare words decompose into subunits: \texttt{"unhappiness"} $\rightarrow$ \texttt{["un","happi","ness"]}.
+
+\subsection{Special Tokens}
+Models reserve special tokens: \texttt{[BOS]}/\texttt{[EOS]} (begin/end of sequence), \texttt{[PAD]} (batch padding), \texttt{[UNK]} (unknown), \texttt{[CLS]} (classification in BERT), \texttt{[SEP]} (segment separator), \texttt{[MASK]} (masked LM training). Modern chat models add role delimiters and tool-call tokens for agentic use.
+
+%=== SECTION III ===
+\section{Tokenization Algorithms}
+\label{sec:algorithms}
+Four algorithms dominate modern NLP. All are \emph{subword} methods.
+
+\subsection{Byte Pair Encoding (BPE)}
+Originally a compression algorithm \cite{gage1994bpe}, adapted for NLP by Sennrich et al.\ \cite{sennrich2016bpe}. Used by GPT-2/3/4, Llama 3, and most modern LLMs.
+
+\textbf{Core idea:} Start with characters; iteratively merge the most frequent adjacent pair until the desired vocabulary size is reached.
+
+\begin{algorithm}[!t]
+\caption{BPE Vocabulary Construction}
+\label{alg:bpe}
+\begin{algorithmic}[1]
+\REQUIRE Corpus $C$, desired vocab size $V$
+\STATE Initialize vocab $\mathcal{V} \leftarrow$ all unique characters in $C$
+\STATE Represent each word as a sequence of characters
+\WHILE{$|\mathcal{V}| < V$}
+    \STATE Count all adjacent symbol pairs in corpus
+    \STATE $(a, b) \leftarrow$ most frequent pair
+    \STATE Merge every occurrence of $(a, b) \rightarrow ab$
+    \STATE Add $ab$ to $\mathcal{V}$
+\ENDWHILE
+\RETURN $\mathcal{V}$ and merge rules (ordered)
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{Worked Example:} Given corpus words \texttt{[low, lower, newest, widest]}:
+\begin{enumerate}[leftmargin=*]
+\item Initial: \texttt{l o w}, \texttt{l o w e r}, \texttt{n e w e s t}, \texttt{w i d e s t}
+\item Most frequent pair: (\texttt{e},\texttt{s}) $\rightarrow$ merge to \texttt{es}
+\item Next: (\texttt{es},\texttt{t}) $\rightarrow$ merge to \texttt{est}
+\item Next: (\texttt{l},\texttt{o}) $\rightarrow$ merge to \texttt{lo}
+\item Continue until $|\mathcal{V}| = V$
+\end{enumerate}
+
+\textbf{Byte-level BPE} (GPT-2+): Uses raw UTF-8 bytes (256 base tokens) instead of Unicode characters, guaranteeing zero OOV tokens for any input.
+
+\textbf{Encoding complexity:} $O(n \cdot m)$ where $n$ is sequence length and $m$ is merge rules count.
+
+\subsection{WordPiece}
+Developed by Google for GNMT \cite{wu2016wordpiece}, used in BERT \cite{devlin2019bert}.
+
+\textbf{Key difference from BPE:} Instead of merging the most \emph{frequent} pair, WordPiece merges the pair that maximizes the \emph{likelihood} of the training data:
+\begin{equation}
+(a,b)^* = \arg\max_{(a,b)} \frac{P(ab)}{P(a) \cdot P(b)}
+\label{eq:wordpiece}
+\end{equation}
+
+This is equivalent to maximizing mutual information between adjacent symbols. Subword fragments are prefixed with \texttt{\#\#} to indicate continuation: \texttt{"playing"} $\rightarrow$ \texttt{["play", "\#\#ing"]}.
+
+\subsection{Unigram Language Model}
+Proposed by Kudo \cite{kudo2018subword}. Unlike BPE (bottom-up merging), Unigram works \emph{top-down}:
+\begin{enumerate}[leftmargin=*]
+\item Start with a large seed vocabulary (e.g., all substrings up to length $k$).
+\item Assign probabilities $P(t_i)$ via EM on the unigram LM:
+\begin{equation}
+P(s) = \prod_{i=1}^{n} P(t_i), \quad s = t_1 t_2 \cdots t_n
+\end{equation}
+\item Find the optimal segmentation via the Viterbi algorithm.
+\item Prune: remove tokens whose removal causes the smallest increase in loss.
+\item Repeat until $|\mathcal{V}| = V$.
+\end{enumerate}
+
+\textbf{Advantage:} Produces multiple valid segmentations with probabilities, enabling \emph{subword regularization} for training robustness.
+
+\subsection{SentencePiece}
+A \emph{framework} (not a single algorithm) by Kudo and Richardson \cite{kudo2018sentencepiece} that wraps BPE or Unigram and operates directly on raw Unicode text---no pre-tokenization (no whitespace splitting needed).
+
+\textbf{Key features:}
+\begin{itemize}[leftmargin=*]
+\item Treats input as a raw byte/character stream (language-agnostic).
+\item Uses a special whitespace token (\texttt{\_}) to preserve spacing: \texttt{"New York"} $\rightarrow$ \texttt{["\_New","\_York"]}.
+\item Self-contained: vocabulary and model in a single binary file.
+\item Used by T5, Llama 2, ALBERT, XLNet, mBART.
+\end{itemize}
+
+\subsection{Comparison of Tokenization Algorithms}
+\begin{table}[!t]
+\centering
+\caption{Tokenization Algorithm Comparison}
+\label{tab:alg_compare}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\columnwidth}{@{}l c c X@{}}
+\toprule
+\textbf{Algorithm} & \textbf{Direction} & \textbf{Criterion} & \textbf{Used By} \\
+\midrule
+BPE & Bottom-up & Frequency & GPT-2/3/4, Llama 3 \\
+WordPiece & Bottom-up & Likelihood & BERT, DistilBERT \\
+Unigram & Top-down & LM loss & T5, ALBERT, XLNet \\
+SentencePiece & Either & Framework & Llama 2, mBART \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%=== SECTION IV ===
+\section{Mathematical Foundations}
+\label{sec:math}
+
+\subsection{Token Embeddings}
+After tokenization, each token ID is mapped to a dense vector via an embedding matrix $\mathbf{E} \in \mathbb{R}^{|\mathcal{V}| \times d}$:
+\begin{equation}
+\mathbf{x}_i = \mathbf{E}[\mathrm{id}_i] \in \mathbb{R}^d
+\label{eq:embedding}
+\end{equation}
+where $d$ is the model dimension (e.g., 768 for BERT-base, 12288 for GPT-4).
+
+\textbf{Embedding matrix size:} For GPT-2 ($|\mathcal{V}|=50257$, $d=1600$): $50257 \times 1600 = 80.4$M parameters just for embeddings.
+
+\subsection{Positional Encoding}
+Tokens lack inherent order. Positional information is injected:
+
+\textbf{Sinusoidal (original Transformer)} \cite{vaswani2017attention}:
+\begin{align}
+\mathrm{PE}_{(pos, 2k)} &= \sin\!\left(\frac{pos}{10000^{2k/d}}\right) \label{eq:pe_sin}\\
+\mathrm{PE}_{(pos, 2k+1)} &= \cos\!\left(\frac{pos}{10000^{2k/d}}\right) \label{eq:pe_cos}
+\end{align}
+
+\textbf{Rotary Position Embeddings (RoPE)} \cite{su2021rope}: Used by Llama, Mistral, Gemma. Encodes position directly into the attention computation via rotation matrices:
+\begin{equation}
+\mathbf{q}_m^{\mathrm{rot}} = \mathbf{R}_{\Theta,m}\, \mathbf{q}_m, \quad \mathbf{k}_n^{\mathrm{rot}} = \mathbf{R}_{\Theta,n}\, \mathbf{k}_n
+\end{equation}
+where $\mathbf{R}_{\Theta,m}$ is a block-diagonal rotation matrix at position $m$.
+
+The final input to the transformer is: $\mathbf{h}_i^{(0)} = \mathbf{x}_i + \mathrm{PE}_i$.
+
+\subsection{Self-Attention Over Tokens}
+The core mechanism relating tokens to each other. For each token, compute Query, Key, Value:
+\begin{equation}
+\mathbf{Q} = \mathbf{H}\mathbf{W}_Q,\quad \mathbf{K} = \mathbf{H}\mathbf{W}_K,\quad \mathbf{V} = \mathbf{H}\mathbf{W}_V
+\end{equation}
+Attention weights:
+\begin{equation}
+\mathrm{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \mathrm{softmax}\!\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right)\mathbf{V}
+\label{eq:attention}
+\end{equation}
+
+The attention matrix $\mathbf{A} \in \mathbb{R}^{n \times n}$ has $O(n^2)$ complexity where $n$ is the number of tokens---the fundamental bottleneck for long contexts.
+
+\textbf{Multi-Head Attention:}
+\begin{equation}
+\mathrm{MHA}(\mathbf{H}) = \mathrm{Concat}(\mathrm{head}_1, \ldots, \mathrm{head}_h)\mathbf{W}_O
+\end{equation}
+where $\mathrm{head}_i = \mathrm{Attention}(\mathbf{H}\mathbf{W}_{Q_i}, \mathbf{H}\mathbf{W}_{K_i}, \mathbf{H}\mathbf{W}_{V_i})$.
+
+\subsection{Output: Token Probabilities}
+The final hidden state $\mathbf{h}_i^{(L)}$ is projected to vocabulary logits:
+\begin{equation}
+\mathbf{z} = \mathbf{h}_n^{(L)} \mathbf{W}_{\text{head}} + \mathbf{b}, \quad \mathbf{W}_{\text{head}} \in \mathbb{R}^{d \times |\mathcal{V}|}
+\end{equation}
+Probabilities via softmax:
+\begin{equation}
+P(t_{n+1} = w \mid t_1, \ldots, t_n) = \frac{\exp(z_w / \tau)}{\sum_{j=1}^{|\mathcal{V}|}\exp(z_j / \tau)}
+\label{eq:softmax}
+\end{equation}
+where $\tau$ is the temperature ($\tau=1$ standard, $\tau<1$ sharper, $\tau>1$ flatter).
+
+\subsection{Training Loss}
+Cross-entropy loss over token predictions:
+\begin{equation}
+\mathcal{L} = -\frac{1}{N}\sum_{i=1}^{N}\log P(t_i \mid t_1, \ldots, t_{i-1}; \theta)
+\label{eq:loss}
+\end{equation}
+This is equivalent to minimizing the \emph{perplexity}: $\mathrm{PPL} = \exp(\mathcal{L})$.
+
+%=== SECTION V ===
+\section{Token Flow Through the Transformer}
+\label{sec:transformers}
+
+The complete token pipeline from input to output:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Raw Input:} ``The cat sat on the mat.''
+\item \textbf{Tokenization:} $\rightarrow$ \texttt{[The, \_ cat, \_ sat, \_ on, \_ the, \_ mat, .]} (7 tokens)
+\item \textbf{Token IDs:} $\rightarrow$ \texttt{[464, 3797, 3332, 319, 262, 2603, 13]}
+\item \textbf{Embedding:} Each ID $\rightarrow$ $\mathbf{x}_i \in \mathbb{R}^d$ via Eq.~\ref{eq:embedding}
+\item \textbf{Position:} Add positional encoding: $\mathbf{h}_i^{(0)} = \mathbf{x}_i + \mathrm{PE}_i$
+\item \textbf{Transformer Layers ($\times L$):}
+    \begin{itemize}
+    \item Multi-head self-attention (Eq.~\ref{eq:attention})
+    \item LayerNorm + residual connection
+    \item Feed-forward network: $\mathrm{FFN}(\mathbf{h}) = \sigma(\mathbf{h}\mathbf{W}_1 + \mathbf{b}_1)\mathbf{W}_2 + \mathbf{b}_2$
+    \item LayerNorm + residual connection
+    \end{itemize}
+\item \textbf{Output Head:} Final hidden state $\rightarrow$ vocabulary logits (Eq.~\ref{eq:softmax})
+\item \textbf{Sampling/Decoding:} Select next token via greedy, top-$k$, top-$p$, or beam search
+\item \textbf{Detokenization:} Token IDs $\rightarrow$ human-readable string
+\end{enumerate}
+
+\subsection{Causal Masking}
+In decoder models (GPT-family), a causal mask ensures token $t_i$ can only attend to tokens $t_1, \ldots, t_i$ (not future tokens):
+\begin{equation}
+M_{ij} = \begin{cases} 0 & \text{if } j \leq i \\ -\infty & \text{if } j > i \end{cases}
+\end{equation}
+Applied as: $\mathrm{softmax}\!\left(\frac{\mathbf{QK}^\top}{\sqrt{d_k}} + \mathbf{M}\right)\mathbf{V}$.
+
+\subsection{KV-Cache: Token-Level Optimization}
+During autoregressive generation, recomputing attention for all previous tokens each step is wasteful. The \textbf{KV-cache} stores computed $\mathbf{K}$ and $\mathbf{V}$ matrices for all previous tokens, so only the new token's $\mathbf{Q}$ is computed at each step.
+
+\textbf{Memory:} $2 \times L \times n \times d_k \times \text{precision}$ (where $L$ = layers, $n$ = tokens generated so far).
+
+\subsection{Decoding Strategies}
+\begin{table}[!t]
+\centering
+\caption{Token Decoding Strategies}
+\label{tab:decoding}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\columnwidth}{@{}l X@{}}
+\toprule
+\textbf{Strategy} & \textbf{Description} \\
+\midrule
+Greedy & Always pick $\arg\max P(t_{n+1})$ \\
+Top-$k$ & Sample from $k$ highest-probability tokens \\
+Top-$p$ (nucleus) & Sample from smallest set with cumulative prob $\geq p$ \\
+Temperature & Scale logits by $\tau$ before softmax (Eq.~\ref{eq:softmax}) \\
+Beam search & Track $B$ best partial sequences \\
+Min-$p$ & Filter tokens with $P < p_{\min} \times P_{\max}$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%=== SECTION VI ===
+\section{Token Economics and Practical Considerations}
+\label{sec:economics}
+
+\subsection{Context Window Sizes}
+The \textbf{context window} (or context length) is the maximum number of tokens a model can process in a single forward pass. This has grown dramatically:
+
+\begin{table}[!t]
+\centering
+\caption{Context Window Evolution (Selected Models)}
+\label{tab:context}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\columnwidth}{@{}l r l@{}}
+\toprule
+\textbf{Model} & \textbf{Context} & \textbf{Year} \\
+\midrule
+GPT-2 & 1,024 & 2019 \\
+GPT-3 & 2,048 / 4,096 & 2020 \\
+GPT-3.5-Turbo & 4,096 / 16,385 & 2023 \\
+GPT-4 & 8,192 / 32,768 & 2023 \\
+GPT-4 Turbo & 128,000 & 2023 \\
+Claude 2.1 & 200,000 & 2023 \\
+Gemini 1.5 Pro & 1,000,000 & 2024 \\
+Claude 3.5 Sonnet & 200,000 & 2024 \\
+GPT-4o & 128,000 & 2024 \\
+Llama 3.1 405B & 128,000 & 2024 \\
+Gemini 2.0 & 2,000,000 & 2025 \\
+GPT-4.5 & 256,000 & 2025 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{API Token Pricing}
+AI providers charge per token, typically with separate input/output rates:
+\begin{equation}
+\text{Cost} = n_{\text{in}} \times r_{\text{in}} + n_{\text{out}} \times r_{\text{out}}
+\end{equation}
+Output tokens are 2--4$\times$ more expensive because they require sequential generation. Cached/prompt-cached input tokens may receive 50\% discounts.
+
+\subsection{Token Efficiency Considerations}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Vocabulary size vs.\ fertility:} Larger vocabularies produce fewer tokens per text (lower \emph{fertility}) but increase embedding matrix size.
+\item \textbf{Multilingual tokenization:} English-centric tokenizers may use 2--5$\times$ more tokens for non-Latin scripts (e.g., Chinese, Arabic, Hindi).
+\item \textbf{Compression ratio:} Good tokenizers achieve ${\sim}$3--4 characters per token for English.
+\item \textbf{Code tokenization:} Code requires handling indentation, operators, and identifiers; Llama 3 expanded vocabulary to 128K partly for better code tokenization.
+\end{itemize}
+
+\subsection{Tokenizer Vocabulary Sizes}
+\begin{table}[!t]
+\centering
+\caption{Vocabulary Sizes of Major Models}
+\label{tab:vocab}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\columnwidth}{@{}l r l@{}}
+\toprule
+\textbf{Model} & $|\mathcal{V}|$ & \textbf{Tokenizer} \\
+\midrule
+BERT & 30,522 & WordPiece \\
+GPT-2 & 50,257 & Byte-level BPE \\
+GPT-3/3.5 & 100,277 & BPE (cl100k) \\
+GPT-4/4o & 100,277 & BPE (cl100k) \\
+Llama 2 & 32,000 & SentencePiece \\
+Llama 3 & 128,256 & BPE (tiktoken) \\
+Gemini & 256,000 & SentencePiece \\
+Claude 3 & ${\sim}$100,000 & BPE variant \\
+Mistral & 32,768 & SentencePiece \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%=== SECTION VII ===
+\section{Tokens Beyond Text: Multimodal and Agentic AI}
+\label{sec:multimodal}
+
+\subsection{Vision Tokens}
+The Vision Transformer (ViT) \cite{dosovitskiy2020vit} treats image patches as tokens:
+\begin{equation}
+\text{Image} \in \mathbb{R}^{H \times W \times C} \rightarrow \text{patches} \in \mathbb{R}^{N \times (P^2 \cdot C)}
+\end{equation}
+where $N = HW/P^2$ patches, each linearly projected to $\mathbb{R}^d$---identical to text token embeddings. A $224 \times 224$ image with $P=16$ produces $14 \times 14 = 196$ tokens.
+
+\textbf{In multimodal LLMs} (GPT-4V, Gemini, LLaVA): images are encoded by a vision encoder into token sequences that are \emph{interleaved} with text tokens in the same transformer.
+
+\subsection{Audio and Speech Tokens}
+Audio is tokenized via learned codecs:
+\begin{itemize}[leftmargin=*]
+\item \textbf{Whisper:} 30-second audio segments $\rightarrow$ log-mel spectrograms $\rightarrow$ encoder tokens.
+\item \textbf{AudioLM / SoundStream:} Neural audio codecs produce discrete tokens from waveforms (e.g., 50 tokens/second).
+\item \textbf{Music generation} (MusicLM, MusicGen): Audio tokens enable LLM-style autoregressive music generation.
+\end{itemize}
+
+\subsection{Video Tokens}
+Video tokenization extends image tokenization temporally:
+\begin{itemize}[leftmargin=*]
+\item Sample keyframes $\rightarrow$ patch tokens per frame $\rightarrow$ concatenate or use 3D patch embeddings.
+\item Gemini 1.5 Pro processes up to 1 hour of video (${\sim}$1M tokens combining visual and audio tokens).
+\item Sora (OpenAI) uses spacetime patches as tokens for video generation.
+\end{itemize}
+
+\subsection{Action and Tool Tokens in AI Agents}
+Modern AI agents extend the token vocabulary to include \emph{actions}:
+\begin{itemize}[leftmargin=*]
+\item \textbf{Tool-call tokens:} Special tokens trigger function calls, e.g., API requests, code execution, web search.
+\item \textbf{Structured output tokens:} JSON/XML formatting tokens for structured responses.
+\item \textbf{Chain-of-thought tokens:} ``Thinking'' tokens in reasoning models (o1, DeepSeek-R1) represent internal deliberation steps. These are generated but may be hidden from the user.
+\item \textbf{Multi-agent communication:} Agents exchange token sequences as messages, with special control tokens for routing and delegation.
+\end{itemize}
+
+%=== SECTION VIII ===
+\section{Advanced and Frontier Topics (2024--2026)}
+\label{sec:advanced}
+
+\subsection{Efficient Attention Mechanisms}
+The $O(n^2)$ attention bottleneck has driven innovation:
+
+\begin{table}[!t]
+\centering
+\caption{Efficient Attention Mechanisms for Long Token Sequences}
+\label{tab:efficient_attn}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\columnwidth}{@{}l c X@{}}
+\toprule
+\textbf{Method} & \textbf{Complexity} & \textbf{Key Idea} \\
+\midrule
+Vanilla & $O(n^2)$ & Full pairwise attention \\
+Flash Attention & $O(n^2)$ & IO-aware exact attention; 2--4$\times$ speedup \\
+Sliding Window & $O(n \cdot w)$ & Attend only to local window of size $w$ \\
+Sparse (Longformer) & $O(n \cdot k)$ & Local + global attention patterns \\
+Linear (Performer) & $O(n)$ & Kernel approximation of softmax \\
+Ring Attention & $O(n^2/p)$ & Distribute across $p$ devices \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Mixture-of-Experts (MoE) Token Routing}
+In MoE transformers (Mixtral, Switch Transformer, Gemini), each token is routed to a subset of expert networks:
+\begin{equation}
+G(\mathbf{x}) = \mathrm{TopK}(\mathrm{softmax}(\mathbf{x} \cdot \mathbf{W}_g), k)
+\end{equation}
+\begin{equation}
+\mathrm{MoE}(\mathbf{x}) = \sum_{i \in \mathrm{TopK}} g_i \cdot E_i(\mathbf{x})
+\end{equation}
+where $g_i$ is the gating weight and $E_i$ is expert $i$. Typically $k=2$ out of 8--16 experts. This allows massive model capacity with constant per-token compute.
+
+\subsection{Speculative Decoding}
+A technique to accelerate autoregressive token generation:
+\begin{enumerate}[leftmargin=*]
+\item A small \emph{draft model} quickly generates $k$ candidate tokens.
+\item The large \emph{target model} verifies all $k$ tokens in parallel (one forward pass).
+\item Accepted tokens are kept; the first rejected token is resampled from the target.
+\end{enumerate}
+This produces \emph{identical} output to the target model but 2--3$\times$ faster, because verification of $k$ tokens is cheaper than generating them one at a time.
+
+\subsection{Tokenization-Free (Byte-Level) Models}
+An emerging direction eliminates tokenization entirely:
+\begin{itemize}[leftmargin=*]
+\item \textbf{ByT5} \cite{xue2022byt5}: Operates on UTF-8 bytes. Competitive with subword models on many tasks, especially noisy/multilingual text.
+\item \textbf{MambaByte:} Uses the Mamba (state-space model) architecture to efficiently process long byte sequences.
+\item \textbf{Advantages:} No tokenizer training, no OOV, language-agnostic, robust to typos and adversarial inputs.
+\item \textbf{Challenge:} 3--4$\times$ longer sequences require efficient architectures.
+\end{itemize}
+
+\subsection{Token-Level Reasoning: Chain-of-Thought}
+Models like OpenAI o1, o3, and DeepSeek-R1 use extended token generation for reasoning:
+\begin{itemize}[leftmargin=*]
+\item The model generates hundreds to thousands of ``thinking tokens'' before producing the final answer.
+\item These tokens represent step-by-step reasoning, backtracking, and verification.
+\item Compute cost scales with reasoning token count, creating a \emph{test-time compute} paradigm.
+\item ``Thinking budgets'' allow users to control reasoning depth via token limits.
+\end{itemize}
+
+\subsection{Long-Context Innovations}
+Scaling to millions of tokens requires:
+\begin{itemize}[leftmargin=*]
+\item \textbf{RoPE scaling:} Extending rotary position embeddings via NTK-aware interpolation or YaRN.
+\item \textbf{Hierarchical attention:} Process tokens at multiple granularity levels.
+\item \textbf{Retrieval-augmented generation (RAG):} Instead of fitting everything in context, retrieve relevant tokens/chunks from external memory.
+\item \textbf{Sliding window with sinks:} Attention sinks + local window for streaming inference.
+\end{itemize}
+
+\subsection{Tokenization and Security}
+Tokens create unique security challenges:
+\begin{itemize}[leftmargin=*]
+\item \textbf{Prompt injection:} Adversarial token sequences that override model instructions.
+\item \textbf{Token smuggling:} Using unusual Unicode or byte sequences that tokenize differently than expected.
+\item \textbf{Glitch tokens:} Tokens with anomalous embeddings due to training data artifacts (e.g., the infamous \texttt{SolidGoldMagikarp} token in GPT-2).
+\item \textbf{Tokenization attacks:} Crafting inputs that exploit tokenizer behavior to bypass safety filters.
+\end{itemize}
+
+%=== SECTION IX ===
+\section{Practical Guide: Working with Tokens}
+\label{sec:practical}
+
+\subsection{Counting Tokens}
+\begin{lstlisting}[language=Python, caption={Token counting with tiktoken (OpenAI)}]
+import tiktoken
+enc = tiktoken.encoding_for_model("gpt-4o")
+tokens = enc.encode("Hello, world!")
+print(f"Token count: {len(tokens)}")
+print(f"Token IDs:   {tokens}")
+print(f"Decoded:     {[enc.decode([t]) for t in tokens]}")
+# Output: Token count: 4
+# Token IDs:   [9906, 11, 1917, 0]
+# Decoded:     ['Hello', ',', ' world', '!']
+\end{lstlisting}
+
+\subsection{Key Practical Rules}
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Token $\neq$ word:} ``ChatGPT is great!'' is 5 tokens, not 4 words.
+\item \textbf{Whitespace matters:} Leading spaces are often included in tokens.
+\item \textbf{Languages differ:} Chinese/Japanese text uses more tokens per character than English.
+\item \textbf{Code is token-heavy:} Indentation, brackets, and boilerplate consume tokens.
+\item \textbf{Numbers are tricky:} ``123456'' may be 1--3 tokens depending on tokenizer.
+\end{enumerate}
+
+%=== SECTION X ===
+\section{Open Problems and Future Directions}
+\label{sec:conclusion}
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Optimal vocabulary size:} No theoretical framework for choosing $|\mathcal{V}|$; current sizes are chosen empirically.
+\item \textbf{Multilingual fairness:} Tokenizers systematically disadvantage non-English languages with higher token counts (and thus higher costs).
+\item \textbf{Tokenization-free scaling:} Can byte-level models fully replace subword tokenizers at frontier scale?
+\item \textbf{Infinite context:} Moving beyond fixed context windows to truly unbounded token processing.
+\item \textbf{Token-efficient reasoning:} Reducing the number of ``thinking tokens'' while maintaining reasoning quality.
+\item \textbf{Multimodal unification:} A single tokenization scheme for text, images, audio, video, and actions.
+\item \textbf{Dynamic vocabularies:} Adapting the tokenizer during training or inference based on domain.
+\item \textbf{Semantic tokens:} Moving from surface-form subwords to meaning-bearing units.
+\end{enumerate}
+
+\section{Conclusion}
+Tokens are the lingua franca of artificial intelligence. From the simple BPE merge operation to million-token context windows, from text subwords to vision patches and agent tool calls, the concept of the token has expanded to become the universal abstraction through which AI systems perceive, reason about, and generate content. Understanding tokens---their construction, mathematics, economics, and evolution---is essential for anyone working with or building upon modern AI systems. As the field progresses toward 2026 and beyond, tokens will continue to evolve: becoming more efficient, more multimodal, and perhaps eventually giving way to continuous, tokenization-free representations.
+
+% ============================================================
+% REFERENCES
+% ============================================================
+\begin{thebibliography}{99}
+\bibitem{gage1994bpe} P.\ Gage, ``A new algorithm for data compression,'' \emph{C Users Journal}, vol.\ 12, no.\ 2, pp.\ 23--38, 1994.
+\bibitem{mikolov2013word2vec} T.\ Mikolov, K.\ Chen, G.\ Corrado, and J.\ Dean, ``Efficient estimation of word representations in vector space,'' in \emph{Proc. ICLR Workshop}, 2013.
+\bibitem{sennrich2016bpe} R.\ Sennrich, B.\ Haddow, and A.\ Birch, ``Neural machine translation of rare words with subword units,'' in \emph{Proc. ACL}, 2016, pp.\ 1715--1725.
+\bibitem{wu2016wordpiece} Y.\ Wu \emph{et al.}, ``Google's neural machine translation system: Bridging the gap between human and machine translation,'' \emph{arXiv:1609.08144}, 2016.
+\bibitem{vaswani2017attention} A.\ Vaswani \emph{et al.}, ``Attention is all you need,'' in \emph{Proc. NeurIPS}, 2017, pp.\ 5998--6008.
+\bibitem{kudo2018subword} T.\ Kudo, ``Subword regularization: Improving neural network translation models with multiple subword candidates,'' in \emph{Proc. ACL}, 2018, pp.\ 66--75.
+\bibitem{kudo2018sentencepiece} T.\ Kudo and J.\ Richardson, ``SentencePiece: A simple and language independent subword tokenizer and detokenizer for neural text processing,'' in \emph{Proc. EMNLP}, 2018, pp.\ 66--71.
+\bibitem{radford2018gpt} A.\ Radford, K.\ Narasimhan, T.\ Salimans, and I.\ Sutskever, ``Improving language understanding by generative pre-training,'' OpenAI Tech Report, 2018.
+\bibitem{devlin2019bert} J.\ Devlin, M.-W.\ Chang, K.\ Lee, and K.\ Toutanova, ``BERT: Pre-training of deep bidirectional transformers for language understanding,'' in \emph{Proc. NAACL}, 2019, pp.\ 4171--4186.
+\bibitem{radford2019gpt2} A.\ Radford \emph{et al.}, ``Language models are unsupervised multitask learners,'' OpenAI Tech Report, 2019.
+\bibitem{brown2020gpt3} T.\ Brown \emph{et al.}, ``Language models are few-shot learners,'' in \emph{Proc. NeurIPS}, 2020, pp.\ 1877--1901.
+\bibitem{dosovitskiy2020vit} A.\ Dosovitskiy \emph{et al.}, ``An image is worth 16x16 words: Transformers for image recognition at scale,'' in \emph{Proc. ICLR}, 2021.
+\bibitem{su2021rope} J.\ Su, Y.\ Lu, S.\ Pan, A.\ Murtadha, B.\ Wen, and Y.\ Liu, ``RoFormer: Enhanced transformer with rotary position embedding,'' \emph{arXiv:2104.09864}, 2021.
+\bibitem{xue2022byt5} L.\ Xue \emph{et al.}, ``ByT5: Towards a token-free future with pre-trained byte-to-byte models,'' \emph{Trans. ACL}, vol.\ 10, pp.\ 291--306, 2022.
+\bibitem{openai2023gpt4} OpenAI, ``GPT-4 technical report,'' \emph{arXiv:2303.08774}, 2023.
+\bibitem{touvron2023llama2} H.\ Touvron \emph{et al.}, ``Llama 2: Open foundation and fine-tuned chat models,'' \emph{arXiv:2307.09288}, 2023.
+\bibitem{google2023gemini} Gemini Team, Google, ``Gemini: A family of highly capable multimodal models,'' \emph{arXiv:2312.11805}, 2023.
+\bibitem{google2024gemini15} Gemini Team, Google, ``Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context,'' \emph{arXiv:2403.05530}, 2024.
+\bibitem{meta2024llama3} Meta AI, ``The Llama 3 herd of models,'' \emph{arXiv:2407.21783}, 2024.
+\end{thebibliography}
+
+\end{document}
